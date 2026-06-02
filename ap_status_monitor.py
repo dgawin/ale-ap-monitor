@@ -1739,6 +1739,88 @@ class APMonitor(tk.Tk):
         f.configure(style="TFrame")
         return f
 
+    # ── TreeView context menu (copy) ──────────────────────────────────────
+
+    def _attach_tree_context_menu(self, tree):
+        """
+        Bind a right-click context menu to a Treeview.
+        Offers: copy clicked cell | copy full row | copy all rows as TSV.
+        """
+        menu = tk.Menu(tree, tearoff=0)
+        ctx  = {"row": None, "col_idx": None}
+
+        def _identify_cell(event):
+            iid    = tree.identify_row(event.y)
+            col_id = tree.identify_column(event.x)
+            if not iid or not col_id:
+                return None, None
+            try:
+                col_idx = int(col_id.lstrip("#")) - 1
+            except ValueError:
+                return iid, None
+            return iid, col_idx
+
+        def _copy_cell():
+            iid, col_idx = ctx["row"], ctx["col_idx"]
+            if iid is None or col_idx is None:
+                return
+            vals = tree.item(iid, "values")
+            if col_idx < len(vals):
+                self._clipboard(str(vals[col_idx]))
+
+        def _copy_row():
+            iid = ctx["row"]
+            if not iid:
+                return
+            cols = tree["columns"]
+            vals = tree.item(iid, "values")
+            hdrs = [tree.heading(c)["text"] for c in cols]
+            text = "\t".join(
+                f"{h}: {v}" for h, v in zip(hdrs, vals)
+                if str(v) not in ("—", "", "None")
+            )
+            self._clipboard(text)
+
+        def _copy_all():
+            cols  = tree["columns"]
+            hdrs  = [tree.heading(c)["text"] for c in cols]
+            lines = ["\t".join(hdrs)]
+            for iid in tree.get_children():
+                vals = tree.item(iid, "values")
+                lines.append("\t".join(str(v) for v in vals))
+            self._clipboard("\n".join(lines))
+
+        def _on_right_click(event):
+            iid, col_idx   = _identify_cell(event)
+            ctx["row"]     = iid
+            ctx["col_idx"] = col_idx
+            if iid:
+                tree.selection_set(iid)
+            # Dynamic cell preview in menu label
+            if iid and col_idx is not None:
+                vals     = tree.item(iid, "values")
+                cell_val = str(vals[col_idx]) if col_idx < len(vals) else ""
+                preview  = (cell_val[:28] + "…") if len(cell_val) > 28 else cell_val
+                menu.entryconfig(0, label=f"Zelle kopieren: „{preview}“")
+            else:
+                menu.entryconfig(0, label="Zelle kopieren")
+            try:
+                menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                menu.grab_release()
+
+        menu.add_command(label="Zelle kopieren",          command=_copy_cell)
+        menu.add_command(label="Zeile kopieren",          command=_copy_row)
+        menu.add_separator()
+        menu.add_command(label="Alle kopieren (TSV)", command=_copy_all)
+        tree.bind("<Button-3>", _on_right_click)
+
+    def _clipboard(self, text: str):
+        """Write text to the system clipboard."""
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        self.update()
+
     # ── Tab: System ───────────────────────────────────────────────────────────
 
     def _build_tab_system(self):
@@ -1826,6 +1908,7 @@ class APMonitor(tk.Tk):
         sb_y.pack(side=tk.RIGHT, fill=tk.Y)
         self._client_tree.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         sb_x.pack(fill=tk.X)
+        self._attach_tree_context_menu(self._client_tree)
 
     # ── Tab: Wireless ─────────────────────────────────────────────────────────
 
@@ -2186,6 +2269,7 @@ class APMonitor(tk.Tk):
         sb_x.pack(fill=tk.X)
 
         self._trouble_tree.bind("<Double-Button-1>", self._on_trouble_dblclick)
+        self._attach_tree_context_menu(self._trouble_tree)
 
     def _on_trouble_dblclick(self, event):
         sel = self._trouble_tree.selection()
@@ -2209,11 +2293,29 @@ class APMonitor(tk.Tk):
 
         # ── Helper: simple label row ──────────────────────────────────────────
         def info_row(parent, lbl, val, color=None):
+            """Label + read-only Entry: selectable, Ctrl+C and right-click to copy."""
             f = ttk.Frame(parent)
             f.pack(fill=tk.X, padx=0, pady=2)
-            ttk.Label(f, text=lbl, style="Dim.TLabel", width=17, anchor="w").pack(side=tk.LEFT)
-            kw = {"foreground": color} if color else {}
-            ttk.Label(f, text=str(val or "—"), **kw).pack(side=tk.LEFT)
+            ttk.Label(f, text=lbl, style="Dim.TLabel",
+                      width=17, anchor="w").pack(side=tk.LEFT)
+            text_val = str(val or "—")
+            var = tk.StringVar(value=text_val)
+            e = tk.Entry(
+                f, textvariable=var,
+                state="readonly",
+                readonlybackground=C["bg"],
+                fg=color if color else C["text"],
+                relief=tk.FLAT, bd=0,
+                highlightthickness=0,
+                font=("Segoe UI", 10),
+                width=max(10, len(text_val) + 2),
+            )
+            e.pack(side=tk.LEFT)
+            ctx_m = tk.Menu(e, tearoff=0)
+            ctx_m.add_command(label="Kopieren",
+                              command=lambda v=var: self._clipboard(v.get()))
+            e.bind("<Button-3>",
+                   lambda ev, m=ctx_m: m.tk_popup(ev.x_root, ev.y_root))
 
         # ── Title ─────────────────────────────────────────────────────────────
         hostname = client.get("hostname") or client.get("mac", "—")
