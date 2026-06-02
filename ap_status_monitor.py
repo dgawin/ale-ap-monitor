@@ -935,8 +935,14 @@ def fmt_assoctime(raw):
     """
     if not raw or raw in ("—", "None", "none"):
         return "—"
-    # Already HH:MM:SS or D:HH:MM:SS
-    if re.match(r"^\d+:\d{2}:\d{2}$", str(raw)):
+    # Already HH:MM:SS — convert to "1D h:mm:ss" if hours >= 24
+    m_hms = re.match(r"^(\d+):(\d{2}):(\d{2})$", str(raw))
+    if m_hms:
+        h_total = int(m_hms.group(1))
+        mm = int(m_hms.group(2)); ss = int(m_hms.group(3))
+        if h_total >= 24:
+            d = h_total // 24; h_r = h_total % 24
+            return f"{d}D {h_r}:{mm:02}:{ss:02}"
         return str(raw)
     # Integer seconds
     try:
@@ -946,7 +952,7 @@ def fmt_assoctime(raw):
         sec  = s % 60
         if h >= 24:
             d = h // 24; h %= 24
-            return f"{d}d {h:02}:{m:02}:{sec:02}"
+            return f"{d}D {h}:{m:02}:{sec:02}"
         return f"{h:02}:{m:02}:{sec:02}"
     except (ValueError, TypeError):
         return str(raw)
@@ -1712,28 +1718,25 @@ class APMonitor(tk.Tk):
         self._nb.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
 
         self._tab_system   = self._make_tab("System")
-        self._tab_clients  = self._make_tab("Clients")
+        self._tab_client_list = self._make_tab("Client List")
         self._tab_wireless = self._make_tab("Wireless")
         self._tab_network  = self._make_tab("Network")
         self._tab_mesh     = self._make_tab("MESH")
         self._tab_topo     = self._make_tab("Topology")
-        self._tab_client_trouble = self._make_tab("Client Troubleshooting")
 
-        self._nb.add(self._tab_system,   text="  System  ")
-        self._nb.add(self._tab_clients,  text="  Clients  ")
-        self._nb.add(self._tab_wireless, text="  Wireless  ")
-        self._nb.add(self._tab_network,  text="  Network  ")
-        self._nb.add(self._tab_mesh,     text="  MESH  ")
-        self._nb.add(self._tab_topo,     text="  Topology  ")
-        self._nb.add(self._tab_client_trouble, text="  Client Troubleshooting  ")
+        self._nb.add(self._tab_system,      text="  System  ")
+        self._nb.add(self._tab_client_list, text="  Client List  ")
+        self._nb.add(self._tab_wireless,    text="  Wireless  ")
+        self._nb.add(self._tab_network,     text="  Network  ")
+        self._nb.add(self._tab_mesh,        text="  MESH  ")
+        self._nb.add(self._tab_topo,        text="  Topology  ")
 
         self._build_tab_system()
-        self._build_tab_clients()
+        self._build_tab_client_list()
         self._build_tab_wireless()
         self._build_tab_network()
         self._build_tab_mesh()
         self._build_tab_topo()
-        self._build_tab_client_trouble()
 
         # Sync theme radio to loaded setting
         if hasattr(self, "_theme_var"):
@@ -1907,11 +1910,31 @@ class APMonitor(tk.Tk):
 
     # ── Tab: Clients ──────────────────────────────────────────────────────────
 
-    def _build_tab_clients(self):
-        p = self._tab_clients
-        cols = ("mac", "ip", "hostname", "ssid", "freq", "auth", "role", "online", "rx", "tx")
-        hdrs = ("MAC Address", "IP", "Hostname", "SSID", "Freq", "Auth", "Role", "Online", "RX (MB)", "TX (MB)")
-        widths = (150, 120, 180, 140, 70, 90, 90, 80, 80, 80)
+    def _build_tab_client_list(self):
+        """Single unified client list — identity + radio + health in one table."""
+        p = self._tab_client_list
+
+        cols = (
+            "hostname", "mac", "ip", "ssid",
+            "band", "snr", "txrate", "rxrate", "mode",
+            "auth", "assoc",
+            "rx_mb", "tx_mb",
+            "score", "health",
+        )
+        hdrs = (
+            "Hostname", "MAC", "IP", "SSID",
+            "Band", "SNR", "TX Rate", "RX Rate", "Mode",
+            "Auth", "Assoc Time",
+            "RX (MB)", "TX (MB)",
+            "Score", "Health",
+        )
+        widths = (
+            175, 145, 115, 135,
+            65,  70,  75,  75,  165,
+            80,  90,
+            75,  75,
+            65,  105,
+        )
 
         frame = ttk.Frame(p)
         frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
@@ -1921,19 +1944,29 @@ class APMonitor(tk.Tk):
 
         sb_y = ttk.Scrollbar(frame, orient=tk.VERTICAL)
         sb_x = ttk.Scrollbar(frame, orient=tk.HORIZONTAL)
-        self._client_tree = ttk.Treeview(frame, columns=cols, show="headings",
-                                          yscrollcommand=sb_y.set, xscrollcommand=sb_x.set)
+        self._client_tree = ttk.Treeview(
+            frame, columns=cols, show="headings",
+            yscrollcommand=sb_y.set, xscrollcommand=sb_x.set)
         sb_y.config(command=self._client_tree.yview)
         sb_x.config(command=self._client_tree.xview)
 
         for col, hdr, w in zip(cols, hdrs, widths):
             self._client_tree.heading(col, text=hdr)
-            self._client_tree.column(col, width=w, minwidth=50)
+            self._client_tree.column(col, width=w, minwidth=40, anchor="w")
+
+        # Health cell tags — color only the "health" column text, not the whole row.
+        # Achieved via tag on foreground only (no background override).
+        self._client_tree.tag_configure("h_healthy",  foreground="#4cdb8a")
+        self._client_tree.tag_configure("h_warning",  foreground="#f0c040")
+        self._client_tree.tag_configure("h_critical", foreground="#e05050")
 
         sb_y.pack(side=tk.RIGHT, fill=tk.Y)
         self._client_tree.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         sb_x.pack(fill=tk.X)
+
+        self._client_tree.bind("<Double-Button-1>", self._on_client_list_dblclick)
         self._attach_tree_context_menu(self._client_tree)
+
 
     # ── Tab: Wireless ─────────────────────────────────────────────────────────
 
@@ -2121,57 +2154,49 @@ class APMonitor(tk.Tk):
         cc = d.get("client_count", 0)
         self._client_count_var.set(str(cc))
 
-        # ── Clients tab
+        # ── Client List tab (unified)
         for row in self._client_tree.get_children():
             self._client_tree.delete(row)
         clients = d.get("clients", [])
-        self._client_count_lbl.config(text=f"{len(clients)} client{'s' if len(clients)!=1 else ''} connected")
-        for c in clients:
-            self._client_tree.insert("", tk.END, values=(
-                c.get("mac","—"), c.get("ip","—"), c.get("hostname","—"),
-                c.get("ssid","—"),
-                c.get("freq","—"), c.get("auth","—"), c.get("role","—"),
-                fmt_online(c.get("online","—")),
-                fmt_mb(c.get("rx","—")),
-                fmt_mb(c.get("tx","—")),
-            ))
+        self._client_list_clients = clients
+        n = len(clients)
+        self._client_count_lbl.config(
+            text=f"{n} client{'s' if n != 1 else ''} connected")
 
-        # ── Client Troubleshooting tab
-        for row in self._trouble_tree.get_children():
-            self._trouble_tree.delete(row)
-        self._trouble_clients = clients  # store for double-click lookup
-        self._trouble_count_lbl.config(
-            text=f"{len(clients)} client{'s' if len(clients)!=1 else ''} connected")
         for c in clients:
-            # SNR: prefer continuation-line value, fall back to snr_raw (== RSSI column)
-            snr_val  = c.get("snr") or c.get("snr_raw")
-            rssi_str = f"{snr_val} dB (SNR)" if snr_val is not None else "—"
-            snr_raw  = snr_val
-            snr_str  = f"{snr_val} dB" if snr_val is not None else "—"
-            health   = c.get("health_status") or "—"
-            score_v  = c.get("health_score", 0) or 0
-            if score_v >= 80:
-                tag = "healthy"
-            elif score_v >= 50:
-                tag = "warning"
-            else:
-                tag = "critical"
-            band_raw = c.get("band") or c.get("freq") or "—"
-            mode_raw = c.get("mode") or "—"
+            snr_val   = c.get("snr") or c.get("snr_raw")
+            snr_str   = f"{snr_val} dB" if snr_val is not None else "—"
+            health    = c.get("health_status") or "—"
+            score_v   = c.get("health_score", 0) or 0
             score_str = f"{score_v}/100" if score_v else "—"
-            iid = self._trouble_tree.insert("", tk.END, values=(
-                c.get("hostname") or c.get("mac","—"),
-                c.get("ip","—"),
+            band_str  = c.get("band") or c.get("freq") or "—"
+            mode_str  = c.get("mode") or "—"
+
+            # Tag drives only foreground color on the health cell text
+            if score_v >= 80:
+                tag = "h_healthy"
+            elif score_v >= 50:
+                tag = "h_warning"
+            else:
+                tag = "h_critical"
+
+            iid = self._client_tree.insert("", tk.END, values=(
+                c.get("hostname") or c.get("mac", "—"),
+                c.get("mac", "—"),
+                c.get("ip",  "—"),
+                c.get("ssid","—"),
+                band_str,
                 snr_str,
                 c.get("txrate","—"),
                 c.get("rxrate","—"),
-                band_raw,
-                mode_raw,
+                mode_str,
+                c.get("auth","—"),
                 fmt_assoctime(c.get("assoctime")),
+                fmt_mb(c.get("rx","—")),
+                fmt_mb(c.get("tx","—")),
                 score_str,
                 health,
-            ))
-            self._trouble_tree.item(iid, tags=(tag,))
+            ), tags=(tag,))
 
         # ── Wireless tab
         for row in self._wireless_tree.get_children():
@@ -2250,7 +2275,7 @@ class APMonitor(tk.Tk):
         self._mem_lbl.config(text="—")
         self._mem_detail.set("—")
         self._client_count_var.set("—")
-        for tree in (self._client_tree, self._wireless_tree, self._route_tree, self._trouble_tree):
+        for tree in (self._client_tree, self._wireless_tree, self._route_tree):
             for row in tree.get_children():
                 tree.delete(row)
         for var in self._net_fields.values():
@@ -2260,53 +2285,17 @@ class APMonitor(tk.Tk):
 
     # ── Tab: Client Troubleshooting ───────────────────────────────────────────
 
-    def _build_tab_client_trouble(self):
-        p = self._tab_client_trouble
-        cols   = ("hostname", "ip", "snr", "tx", "rx", "band", "mode", "assoc", "score", "health")
-        hdrs   = ("Hostname", "IP", "SNR", "TX Rate", "RX Rate", "Band", "Mode", "Assoc Time", "Score", "Health")
-        widths = (180, 120, 80, 85, 85, 70, 170, 90, 65, 110)
 
-        frame = ttk.Frame(p)
-        frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
-
-        self._trouble_count_lbl = ttk.Label(frame, text="0 clients", style="Dim.TLabel")
-        self._trouble_count_lbl.pack(anchor="w", pady=(0, 6))
-
-        sb_y = ttk.Scrollbar(frame, orient=tk.VERTICAL)
-        sb_x = ttk.Scrollbar(frame, orient=tk.HORIZONTAL)
-        self._trouble_tree = ttk.Treeview(
-            frame, columns=cols, show="headings",
-            yscrollcommand=sb_y.set, xscrollcommand=sb_x.set)
-        sb_y.config(command=self._trouble_tree.yview)
-        sb_x.config(command=self._trouble_tree.xview)
-
-        for col, hdr, w in zip(cols, hdrs, widths):
-            self._trouble_tree.heading(col, text=hdr)
-            self._trouble_tree.column(col, width=w, minwidth=50)
-
-        # Row color tags
-        self._trouble_tree.tag_configure("healthy",  background="#1a3d2a", foreground=C["text"])
-        self._trouble_tree.tag_configure("warning",  background="#3d3210", foreground=C["text"])
-        self._trouble_tree.tag_configure("critical", background="#3d1010", foreground=C["text"])
-
-        sb_y.pack(side=tk.RIGHT, fill=tk.Y)
-        self._trouble_tree.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        sb_x.pack(fill=tk.X)
-
-        self._trouble_tree.bind("<Double-Button-1>", self._on_trouble_dblclick)
-        self._attach_tree_context_menu(self._trouble_tree)
-
-    def _on_trouble_dblclick(self, event):
-        sel = self._trouble_tree.selection()
+    def _on_client_list_dblclick(self, event):
+        sel = self._client_tree.selection()
         if not sel:
             return
         iid = sel[0]
-        # Retrieve stored client dict via tag
-        if not hasattr(self, "_trouble_clients"):
+        if not hasattr(self, "_client_list_clients"):
             return
-        idx = self._trouble_tree.index(iid)
-        if idx < len(self._trouble_clients):
-            self._show_client_details(self._trouble_clients[idx])
+        idx = self._client_tree.index(iid)
+        if idx < len(self._client_list_clients):
+            self._show_client_details(self._client_list_clients[idx])
 
     def _show_client_details(self, client):
         """Popup with full radio detail and health score breakdown."""
