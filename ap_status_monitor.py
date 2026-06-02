@@ -9,7 +9,7 @@ Layout:
   Bottom: IP input, refresh controls, log bar
 """
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.1.1"
 APP_NAME    = "ALE OmniAccess Stellar – AP Status Monitor"
 
 STATIC_CACHE_TTL = 600   # seconds — static AP data refreshed every 10 min
@@ -2262,8 +2262,10 @@ class APMonitor(tk.Tk):
         self._neighbor_tree.tag_configure("rssi_bad",  foreground=C["err"])
 
         # ── Topology canvas
-        ap_name = d.get("ap_name", "") or sys.get("ap_name", "This AP")
-        self._topo_data = (ap_name, ip, mesh.get("neighbors", []))
+        ap_name  = d.get("ap_name", "") or sys.get("ap_name", "This AP")
+        ap_loc   = d.get("location", "") or sys.get("location", "")
+        ap_loc   = "" if ap_loc in ("—", "---", None) else ap_loc
+        self._topo_data = (ap_name, ip, mesh.get("neighbors", []), ap_loc)
         self._redraw_topology()
 
     def _clear_detail(self):
@@ -2621,7 +2623,11 @@ class APMonitor(tk.Tk):
                 fill=C["text_dim"], font=("Segoe UI", 9))
             return
 
-        self_name, self_ip, neighbors = self._topo_data
+        topo = self._topo_data
+        self_name = topo[0]
+        self_ip   = topo[1]
+        neighbors = topo[2]
+        self_loc  = topo[3] if len(topo) > 3 else ""
         W = c.winfo_width()  or 400
         H = c.winfo_height() or 220
 
@@ -2659,7 +2665,7 @@ class APMonitor(tk.Tk):
         # --- Draw nodes ---
         R = 22  # node radius
 
-        def draw_node(x, y, label, color, is_self=False):
+        def draw_node(x, y, label, color, is_self=False, location=""):
             ring = C["accent"] if is_self else color
             c.create_oval(x-R, y-R, x+R, y+R,
                           fill=color, outline=ring,
@@ -2669,14 +2675,41 @@ class APMonitor(tk.Tk):
             short = label[:5] if len(label) > 5 else label
             c.create_text(x, y, text=short, fill=C["text_bright"],
                           font=("Segoe UI", 7, "bold"), tags=("node",))
-            # Full label below circle
+            # AP name below circle
             c.create_text(x, y + R + 9, text=label, fill=C["text"],
                           font=("Segoe UI", 8), tags=("node",))
+            # Location below name — only if available
+            if location:
+                c.create_text(x, y + R + 20, text=location,
+                              fill=C["text_dim"], font=("Segoe UI", 7),
+                              tags=("node",))
 
         # Self AP (center)
         draw_node(self_pos[0], self_pos[1], self_name or "This AP",
-                  C["accent"], is_self=True)
+                  C["accent"], is_self=True, location=self_loc)
         self._topo_nodes[self_name or "This AP"] = self_pos
+
+        # Tooltip for self AP node
+        self_tag = "self_node"
+        for item in c.find_overlapping(
+                self_pos[0]-R-2, self_pos[1]-R-2,
+                self_pos[0]+R+2, self_pos[1]+R+2):
+            c.addtag_withtag(self_tag, item)
+
+        def _self_enter(event, name=self_name, ip=self_ip, loc=self_loc):
+            lines = [name or "This AP", ip or "—"]
+            if loc:
+                lines.append(f"📍 {loc}")
+            self._topo_tip.config(text="\n".join(lines))
+            self._topo_tip.place(
+                x=min(event.x + 12, W - 140),
+                y=min(event.y + 12, H - 80))
+
+        def _self_leave(event):
+            self._topo_tip.place_forget()
+
+        c.tag_bind(self_tag, "<Enter>", _self_enter)
+        c.tag_bind(self_tag, "<Leave>", _self_leave)
 
         # Neighbor nodes
         for i, nb in enumerate(neighbors):
@@ -2689,7 +2722,9 @@ class APMonitor(tk.Tk):
             else:
                 node_color = self._rssi_link_color(best_rssi)
 
-            draw_node(nb_pos[0], nb_pos[1], name, node_color)
+            nb_loc = nb.get("location", "") or ""
+            nb_loc = "" if nb_loc in ("—", "---") else nb_loc
+            draw_node(nb_pos[0], nb_pos[1], name, node_color, location=nb_loc)
             self._topo_nodes[name] = nb_pos
 
             # Bind hover tooltip to each neighbor node area
@@ -2937,13 +2972,22 @@ class APMonitor(tk.Tk):
 
         # Changelog entries: (version, date, [changes])
         CHANGELOG = [
+            ("0.1.1", "2025-06-02", [
+                "Clients + Client Troubleshooting zu einem Tab 'Client List' zusammengeführt",
+                "Health-Status färbt nur noch die Health-Zelle, nicht die ganze Zeile",
+                "Assoc-Zeit-Format: 1D 2:30:30 bei über 24h",
+                "Rechtsklick-Kopier-Menü in Client-Tabelle (Zelle, Zeile, Alle als TSV)",
+                "Client-Detail-Popup: alle Felder selektierbar und kopierbar",
+                "Topology: Location unter AP-Name (nur wenn vorhanden)",
+                "Topology: Hover-Tooltip zeigt Location für alle Nodes inkl. Self-AP",
+            ]),
             ("0.1.0", "2025-06-02", [
                 "Initiale Version",
                 "AP-Scan per SSH (IP-Range, Liste, Auto-Refresh)",
                 "Tabs: System, Clients, Wireless, Network, MESH, Topology",
                 "Client Troubleshooting Tab mit SNR-basiertem Health Score",
                 "wlanconfig Interface-Erkennung dynamisch (über iwconfig + /sys/class/net)",
-                "Debug SSH-Logging (Settings \u2192 Debug)",
+                "Debug SSH-Logging (Settings → Debug)",
                 "Multi-Profil INI-System",
                 "Dark / Light Theme",
             ]),
