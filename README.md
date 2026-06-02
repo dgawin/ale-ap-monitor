@@ -83,3 +83,11 @@ EXE and INI files will be created in the same directory.
 - SSH debug logging (Settings → Debug)
 - Multi-profile INI system
 - Dark / Light theme
+
+## Disclaimer
+
+This project is an independent, community-developed tool and is **not affiliated with, endorsed by, or associated with Alcatel-Lucent Enterprise (ALE)** in any way.
+
+The names **ALE**, **Alcatel-Lucent Enterprise**, **OmniAccess**, and **Stellar** are trademarks or registered trademarks of Alcatel-Lucent Enterprise. All other product and company names mentioned are the property of their respective owners.
+
+These names are used solely to describe compatibility with ALE OmniAccess Stellar hardware. No trademark rights are claimed.
