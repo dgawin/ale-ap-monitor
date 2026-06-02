@@ -1,0 +1,26 @@
+# PyInstaller
+dist/
+build/
+*.spec
+
+# Runtime files
+*.ini
+ap_monitor_debug.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Windows
+Thumbs.db
+Desktop.ini
