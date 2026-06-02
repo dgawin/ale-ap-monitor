@@ -2,10 +2,9 @@
 
 A professional Windows desktop tool for monitoring and troubleshooting ALE OmniAccess Stellar access points via SSH.
 
-![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Version](https://img.shields.io/badge/version-0.1.1-blue)
 ![Python](https://img.shields.io/badge/python-3.8%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![License](https://img.shields.io/badge/license-MIT-green)
 
 ## Features
 
@@ -74,6 +73,16 @@ EXE and INI files will be created in the same directory.
 
 ## Changelog
 
+
+### v0.1.1 (2025-06-02)
+- Merged Clients + Client Troubleshooting into single **Client List** tab
+- Health status colors only the Health cell (not the whole row)
+- Association time format: `1D 2:30:30` for durations over 24h
+- Right-click copy menu on client table (cell, row, all as TSV)
+- Client detail popup: all fields selectable and copyable
+- Topology: location shown below AP name (only when available)
+- Topology: hover tooltip includes location for all nodes including self AP
+
 ### v0.1.0 (2025-06-02)
 - Initial release
 - AP scan via SSH (IP range, list, auto-refresh)
@@ -83,11 +92,3 @@ EXE and INI files will be created in the same directory.
 - SSH debug logging (Settings → Debug)
 - Multi-profile INI system
 - Dark / Light theme
-
-## Disclaimer
-
-This project is an independent, community-developed tool and is **not affiliated with, endorsed by, or associated with Alcatel-Lucent Enterprise (ALE)** in any way.
-
-The names **ALE**, **Alcatel-Lucent Enterprise**, **OmniAccess**, and **Stellar** are trademarks or registered trademarks of Alcatel-Lucent Enterprise. All other product and company names mentioned are the property of their respective owners.
-
-These names are used solely to describe compatibility with ALE OmniAccess Stellar hardware. No trademark rights are claimed.
