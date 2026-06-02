@@ -5,6 +5,7 @@ A professional Windows desktop tool for monitoring and troubleshooting ALE OmniA
 ![Version](https://img.shields.io/badge/version-0.1.0-blue)
 ![Python](https://img.shields.io/badge/python-3.8%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 ## Features
 
