@@ -927,6 +927,31 @@ def fmt_online(seconds):
     return f"{hours:02}:{minutes:02}:{secs:02}"
 
 
+def fmt_assoctime(raw):
+    """
+    Normalize association time to HH:MM:SS.
+    Accepts: "HH:MM:SS" (from wlanconfig), integer seconds (from sta_list),
+    or any string — returned as-is if unrecognised.
+    """
+    if not raw or raw in ("—", "None", "none"):
+        return "—"
+    # Already HH:MM:SS or D:HH:MM:SS
+    if re.match(r"^\d+:\d{2}:\d{2}$", str(raw)):
+        return str(raw)
+    # Integer seconds
+    try:
+        s    = int(raw)
+        h    = s // 3600
+        m    = (s % 3600) // 60
+        sec  = s % 60
+        if h >= 24:
+            d = h // 24; h %= 24
+            return f"{d}d {h:02}:{m:02}:{sec:02}"
+        return f"{h:02}:{m:02}:{sec:02}"
+    except (ValueError, TypeError):
+        return str(raw)
+
+
 def rssi_to_dbm(rssi_val):
     """Convert ALE RSSI value to dBm. Formula: dBm = RSSI - 96."""
     try:
@@ -2142,7 +2167,7 @@ class APMonitor(tk.Tk):
                 c.get("rxrate","—"),
                 band_raw,
                 mode_raw,
-                c.get("assoctime","—"),
+                fmt_assoctime(c.get("assoctime")),
                 score_str,
                 health,
             ))
@@ -2322,44 +2347,49 @@ class APMonitor(tk.Tk):
         ttk.Label(win, text=hostname, style="Title.TLabel",
                   padding=(20, 14, 20, 4)).pack(anchor="w")
 
-        # ── Two-column layout ─────────────────────────────────────────────────
+        # ── Two-column layout ──────────────────────────────────────────────────────────────────
         body = ttk.Frame(win)
         body.pack(fill=tk.BOTH, padx=16, pady=(0, 8))
         body.columnconfigure(0, weight=1)
         body.columnconfigure(1, weight=1)
 
-        # Left: identity
+        # Left: Identity — all sta_list fields
         id_f = ttk.LabelFrame(body, text="Identity", padding=10)
         id_f.grid(row=0, column=0, sticky="nsew", padx=(0, 6), pady=4)
         for lbl, val in [
-            ("MAC",        client.get("mac", "—")),
-            ("IP",         client.get("ip",  "—")),
+            ("Hostname",   client.get("hostname") or "—"),
+            ("MAC",        client.get("mac",  "—")),
+            ("IP",         client.get("ip",   "—")),
             ("SSID",       client.get("ssid", "—")),
+            ("Freq",       client.get("freq", "—")),
+            ("Auth",       client.get("auth", "—")),
+            ("Role",       client.get("role", "—")),
             ("Online",     fmt_online(client.get("online", "—"))),
-            ("Assoc Time", client.get("assoctime", "—")),
-            ("Mode",       client.get("mode", "—")),
+            ("Assoc Time", fmt_assoctime(client.get("assoctime"))),
+            ("RX",         fmt_mb(client.get("rx", "—"))),
+            ("TX",         fmt_mb(client.get("tx", "—"))),
         ]:
             info_row(id_f, lbl, val)
 
-        # Right: radio
+        # Right: Radio — wlanconfig data
         radio_f = ttk.LabelFrame(body, text="Radio", padding=10)
         radio_f.grid(row=0, column=1, sticky="nsew", padx=(6, 0), pady=4)
 
-        snr_val = client.get("snr") or client.get("snr_raw")
-        snr_str = f"{snr_val} dB" if snr_val is not None else "—"
+        snr_val   = client.get("snr") or client.get("snr_raw")
+        snr_str   = f"{snr_val} dB" if snr_val is not None else "—"
         snr_color = (C["ok"]   if snr_val is not None and int(snr_val) > 30
                      else C["warn"] if snr_val is not None and int(snr_val) > 15
                      else C["err"])
         for lbl, val, col in [
-            ("SNR",     snr_str,                     snr_color),
-            ("Band",    client.get("band", "—"),     None),
-            ("TX Rate", client.get("txrate", "—"),   None),
-            ("RX Rate", client.get("rxrate", "—"),   None),
+            ("SNR",     snr_str,                       snr_color),
+            ("Band",    client.get("band",    "—"),   None),
+            ("TX Rate", client.get("txrate",  "—"),   None),
+            ("RX Rate", client.get("rxrate",  "—"),   None),
             ("Mode",    client.get("mode",    "—"),   None),
         ]:
             info_row(radio_f, lbl, val, col)
 
-        # ── Health score breakdown ────────────────────────────────────────────
+                # ── Health score breakdown ────────────────────────────────────────────
         health   = client.get("health_status", "—")
         score    = client.get("health_score",  0)
         brkdown  = client.get("health_breakdown", [])
